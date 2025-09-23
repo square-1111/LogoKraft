@@ -1,0 +1,18 @@
+[project]
+name = "logokraft-backend"
+version = "0.1.0"
+description = "LogoKraft AI-powered logo generation backend"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "supabase>=2.0.0",
+    "google-generativeai>=0.3.0",
+    "python-multipart>=0.0.6",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "requests>=2.31.0",
+    "pillow>=10.0.0",
+    "aiofiles>=23.2.0",
+]
