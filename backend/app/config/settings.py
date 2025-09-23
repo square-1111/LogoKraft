@@ -1,8 +1,14 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"  # Ignore extra environment variables
+    )
+    
     # Supabase Configuration
     supabase_url: str
     supabase_anon_key: str
@@ -18,9 +24,5 @@ class Settings(BaseSettings):
     # Application Settings
     environment: str = "development"
     debug: bool = True
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 settings = Settings()
