@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+from app.routes import stream_routes
+
 load_dotenv()
 
 app = FastAPI(
@@ -18,10 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(stream_routes.router)
+
 @app.get("/")
 async def root():
     return {"message": "LogoKraft API is running"}
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "milestone": "1-smoke-test"}
