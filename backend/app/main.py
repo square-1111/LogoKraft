@@ -1,17 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import logging
+from dotenv import load_dotenv
 
 from app.routes import stream_routes, auth_routes, project_routes
 from app.models.schemas import HealthResponse
 from app.services.supabase_service import supabase_service
 
+# Load environment variables
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 app = FastAPI(
     title="LogoKraft API",
@@ -42,7 +43,7 @@ async def root():
     return {
         "message": "LogoKraft API is running",
         "version": "0.2.0",
-        "milestone": "2-api-skeleton",
+        "milestone": "3-ai-integration",
         "docs": "/api/docs"
     }
 

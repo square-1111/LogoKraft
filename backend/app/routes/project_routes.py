@@ -16,6 +16,7 @@ from app.models.schemas import (
     StreamMessage
 )
 from app.services.supabase_service import supabase_service
+from app.services.orchestrator_service import OrchestratorService
 from app.routes.auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ router = APIRouter(
     response_model=ProjectCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create new project",
-    description="Create a new brand project. Optionally upload an inspiration image. No AI processing yet - just database storage."
+    description="Create a new brand project and start AI logo generation. Optionally upload an inspiration image. Returns immediately while AI processing runs in background."
 )
 async def create_project(
     project_name: str = Form(..., description="Name of the project"),
@@ -44,13 +45,14 @@ async def create_project(
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
-    Create a new brand project with optional inspiration image.
+    Create a new brand project with optional inspiration image and start AI generation.
     
     This endpoint:
     1. Parses the project data and validates it
     2. Uploads inspiration image to storage if provided
     3. Creates a project record in the database
-    4. Returns the created project (no AI processing yet)
+    4. Triggers AI logo generation workflow in background
+    5. Returns immediately while generation runs asynchronously
     
     Args:
         project_name: Name of the project
@@ -125,9 +127,15 @@ async def create_project(
         
         logger.info(f"Project created successfully: {created_project['id']}")
         
+        # NEW: Trigger AI logo generation workflow in background
+        orchestrator = OrchestratorService()
+        asyncio.create_task(
+            orchestrator.start_logo_generation(created_project['id'])
+        )
+        
         return ProjectCreateResponse(
             project=ProjectResponse(**created_project),
-            message="Project created successfully. AI generation will begin shortly." 
+            message="Project created successfully. AI logo generation has started!" 
         )
         
     except HTTPException:

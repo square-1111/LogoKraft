@@ -75,30 +75,109 @@
 - [x] Real-time streaming functional with SSE
 - [x] File upload and storage integration working
 
-## ⏳ Milestone 3: AI Core (TODO)
+## 🚀 Milestone 3: AI Core Integration (IN PROGRESS)
 
-### AI Integration (After API Skeleton)
+### Revolutionary "Logo Archetype" Strategy Implementation
 
-#### 1. `app/services/gemini_service.py`
-- [ ] `create_prompts_from_brief()` function
-- [ ] Integrate with Gemini 2.5 Pro
-- [ ] Generate high-quality image prompts
+**Strategic Innovation**: Transform user briefs into 15 diverse, professional logo concepts using AI orchestration with Gemini 2.5 Pro as Creative Director and Seedream v4 as Master Artist.
 
-#### 2. `app/services/orchestrator_service.py`
-- [ ] Coordinate prompt generation
-- [ ] Manage background tasks
-- [ ] Create generated_assets entries
+#### PHASE 1: THE CREATIVE DIRECTOR ⏳ NEXT
+**Priority: HIGHEST** - The secret sauce
 
-#### 3. `app/services/image_generation_service.py`
-- [ ] `generate_image()` function
-- [ ] Seedream API integration
-- [ ] Upload to generated-assets bucket
-- [ ] Update asset status
+**1. `app/services/gemini_service.py`**
+- [ ] **Meta-Prompt System**: Implement comprehensive logo archetype strategy
+- [ ] **`create_prompts_from_brief()`**: Generate 15 diverse prompts across 5 archetypes
+  - Abstract Mark (4), Lettermark (3), Wordmark (3), Combination (3), Pictorial (2)
+- [ ] **`analyze_inspiration_image()`**: Smart style extraction (not copying)
+- [ ] **Error Handling**: Robust API integration with retry logic
+- [ ] **Environment Setup**: Add GOOGLE_API_KEY configuration
+- [ ] **Quality Testing**: Validate prompt diversity and Seedream v4 compatibility
 
-#### 4. Wire AI into existing endpoints
-- [ ] Connect POST /api/v1/projects to AI services
-- [ ] Background task execution
-- [ ] Real-time status updates via existing SSE
+**Success Criteria**: Generate 15 diverse prompts from any brand brief with inspiration analysis
+
+#### PHASE 2: THE MASTER ARTIST ⏳ PENDING
+**Priority: HIGH** - Executes creative vision
+
+**2. `app/services/image_generation_service.py`**
+- [ ] **fal.ai Seedream v4 Integration**: Professional logo image generation via fal.ai platform
+- [ ] **`generate_initial_concept()`**: Convert prompts to high-quality logos using fal-client
+- [ ] **Storage Management**: Upload to generated-assets Supabase bucket
+- [ ] **Database Integration**: Real-time status updates for SSE streaming
+- [ ] **Error Isolation**: Failed generations don't break workflow
+- [ ] **Quality Validation**: Ensure professional logo standards (2048x2048 resolution)
+
+**Success Criteria**: Generate professional-quality logos from Gemini prompts using fal.ai
+
+#### PHASE 3: THE PROJECT MANAGER ⏳ PENDING
+**Priority: HIGH** - Orchestrates complete workflow
+
+**3. `app/services/orchestrator_service.py`**
+- [ ] **`start_logo_generation()`**: Main workflow coordination entry point
+- [ ] **Workflow Sequence**: Inspiration analysis → prompts → 15 logos
+- [ ] **Database Management**: Create/update generated_assets entries
+- [ ] **Background Tasks**: Asyncio-based parallel generation
+- [ ] **Progress Tracking**: Real-time status for SSE updates
+- [ ] **Error Recovery**: Handle partial failures gracefully
+
+**Success Criteria**: Complete automated workflow from project creation to 15 logos
+
+#### PHASE 4: INTEGRATION LAYER ⏳ PENDING
+**Priority: CRITICAL** - Makes everything work together
+
+**4. Wire AI into existing endpoints**
+- [ ] **Update `project_routes.py`**: Integrate orchestrator into POST /api/v1/projects
+- [ ] **Background Tasks**: Non-blocking asyncio task execution
+- [ ] **SSE Integration**: Leverage existing real-time streaming for progress
+- [ ] **Error Handling**: Graceful AI workflow failure management
+- [ ] **Backwards Compatibility**: Maintain existing API functionality
+
+**Success Criteria**: Seamless integration with existing Milestone 2 foundation
+
+#### PHASE 5: TESTING & VALIDATION ⏳ PENDING
+**Priority: ESSENTIAL** - Production readiness
+
+**5. Comprehensive Testing Suite**
+- [ ] **Unit Tests**: Each service (gemini, image_generation, orchestrator)
+- [ ] **Integration Tests**: End-to-end workflow validation
+- [ ] **Quality Validation**: Archetype distribution and logo quality
+- [ ] **Load Testing**: Concurrent user scenarios
+- [ ] **Error Scenarios**: Recovery and partial failure testing
+
+**Success Criteria**: Production-ready system with 95%+ test coverage
+
+### 📊 Implementation Timeline
+
+**WEEK 1: FOUNDATION (Phases 1-2)**
+- Days 1-2: Creative Director (Gemini service with meta-prompt)
+- Days 3-4: Master Artist (fal.ai Seedream v4 integration and image generation)
+
+**WEEK 2: ORCHESTRATION (Phases 3-5)**
+- Days 5-6: Project Manager (Workflow orchestration)
+- Day 7: Integration & Testing (Production readiness)
+
+### 🎯 Success Metrics
+
+**Technical Validation:**
+- Complete workflow: User brief → 15 diverse logos
+- Real-time progress via existing SSE streaming
+- Professional quality meeting logo design standards
+- Error handling maintaining system stability
+
+**Business Validation:**
+- Creative diversity demonstrates competitive advantage
+- Quality justifies premium market positioning
+- Performance enables smooth user experience
+- Foundation supports scaling to multiple users
+
+### 🔧 Current Status: PHASE 1 READY TO BEGIN
+
+**Immediate Next Steps:**
+1. ✅ **Comprehensive plan created** (`docs/milestones/MILESTONE_3_PLAN.md`)
+2. ✅ **API specifications updated** for fal.ai Seedream v4 integration
+3. ⏳ **Environment setup** for Google API and fal.ai integration
+4. ⏳ **Begin gemini_service.py implementation** with meta-prompt system
+
+**This milestone transforms LogoKraft from API skeleton to AI-powered creative platform.**
 
 ## ⏳ Phase 3: Editing Workflow (TODO)
 

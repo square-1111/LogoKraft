@@ -17,9 +17,15 @@ class Settings(BaseSettings):
     # Google AI Configuration
     google_api_key: str
     
-    # Image Generation APIs (optional for now)
-    seedream_api_key: Optional[str] = None
+    # fal.ai API Configuration (Seedream v4)
+    fal_key: str
+    
+    # Additional AI Configuration
     nano_banana_api_key: Optional[str] = None
+    gemini_model: str = "gemini-2.5-pro"
+    max_concurrent_generations: int = 8  # fal.ai limit: 10 concurrent tasks (safe buffer)
+    generation_timeout: int = 300  # 5 minutes
+    logo_image_size: int = 2048  # 2048x2048 for logos
     
     # Application Settings
     environment: str = "development"
