@@ -71,7 +71,12 @@ async def signup(user_data: UserSignupRequest):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User already exists with this email address"
             )
-        elif "invalid email" in error_message:
+        elif "invalid" in error_message and "email" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email address. Please use a valid email format."
+            )
+        elif "invalid format" in error_message:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid email address format"
@@ -79,12 +84,13 @@ async def signup(user_data: UserSignupRequest):
         elif "password" in error_message:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password does not meet requirements"
+                detail="Password does not meet requirements (minimum 6 characters)"
             )
         else:
+            # Include original error for debugging
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user account"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Signup failed: {str(e)}"
             )
 
 @router.post("/login",
@@ -128,7 +134,12 @@ async def login(user_data: UserLoginRequest):
         
         # Most auth failures should be 401 Unauthorized
         error_message = str(e).lower()
-        if "invalid" in error_message or "wrong" in error_message or "incorrect" in error_message:
+        if "email not confirmed" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email not confirmed. Please check your email for the confirmation link."
+            )
+        elif "invalid" in error_message or "wrong" in error_message or "incorrect" in error_message:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"

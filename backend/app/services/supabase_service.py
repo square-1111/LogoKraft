@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import logging
+import asyncio
 from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
 from app.config.settings import settings
@@ -46,10 +47,10 @@ class SupabaseService:
             Exception: If signup fails
         """
         try:
-            response = self.client.auth.sign_up({
-                "email": email,
-                "password": password
-            })
+            response = await asyncio.to_thread(
+                self.client.auth.sign_up,
+                {"email": email, "password": password}
+            )
             
             if response.user is None:
                 raise Exception("User creation failed")
@@ -81,10 +82,10 @@ class SupabaseService:
             Exception: If login fails
         """
         try:
-            response = self.client.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
+            response = await asyncio.to_thread(
+                self.client.auth.sign_in_with_password,
+                {"email": email, "password": password}
+            )
             
             if response.user is None:
                 raise Exception("Authentication failed")
@@ -112,7 +113,10 @@ class SupabaseService:
             User data if token is valid, None otherwise
         """
         try:
-            response = self.client.auth.get_user(token)
+            response = await asyncio.to_thread(
+                self.client.auth.get_user, 
+                token
+            )
             if response.user:
                 return {
                     "id": response.user.id,

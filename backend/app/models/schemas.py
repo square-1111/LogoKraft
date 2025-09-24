@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -6,18 +6,18 @@ from datetime import datetime
 
 class UserSignupRequest(BaseModel):
     """Request model for user registration."""
-    email: str = Field(..., description="User's email address")
+    email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., min_length=6, description="User's password (minimum 6 characters)")
 
 class UserLoginRequest(BaseModel):
     """Request model for user authentication."""
-    email: str = Field(..., description="User's email address")
+    email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., description="User's password")
 
 class UserResponse(BaseModel):
     """Response model for user data."""
     id: str = Field(..., description="User's unique identifier")
-    email: str = Field(..., description="User's email address")
+    email: EmailStr = Field(..., description="User's email address")
 
 class AuthResponse(BaseModel):
     """Response model for authentication endpoints."""
