@@ -116,7 +116,13 @@ class StreamMessage(BaseModel):
 
 class SimpleRefinementRequest(BaseModel):
     """Request model for simple logo refinement."""
-    prompt: Optional[str] = Field(None, description="Optional text prompt for refinement (e.g., 'make it more modern')")
+    prompt: Optional[str] = Field(
+        None, 
+        description="Optional text prompt for refinement (e.g., 'make it more modern')",
+        min_length=1,
+        max_length=500,
+        strip_whitespace=True
+    )
 
 class SimpleRefinementResponse(BaseModel):
     """Response model for simple refinement."""

@@ -74,24 +74,32 @@ class SimpleRefinementService:
                     user_prompt=user_prompt or "refine and improve the design"
                 )
                 
-                # 5. Create database entries for 5 variations
-                variation_asset_ids = []
+                # 5. Create database entries for 5 variations using secure RPC
+                variations_data = []
                 for i, prompt in enumerate(variation_prompts):
-                    asset_data = {
-                        'project_id': original_asset['project_id'],
-                        'parent_asset_id': asset_id,
-                        'asset_type': 'simple_refinement',
-                        'status': 'pending',
-                        'generation_prompt': prompt,
-                        'refinement_metadata': {
+                    variations_data.append({
+                        'prompt': prompt,
+                        'metadata': {
                             'user_prompt': user_prompt,
                             'variation_index': i + 1,
                             'refinement_method': 'simple'
                         }
+                    })
+                
+                # Use secure RPC function that enforces ownership
+                result = supabase_service.client.rpc(
+                    'create_refinement_assets_batch',
+                    {
+                        'p_user_id': user_id,
+                        'p_original_asset_id': asset_id,
+                        'p_variations': variations_data
                     }
-                    
-                    result = supabase_service.client.table('generated_assets').insert(asset_data).execute()
-                    variation_asset_ids.append(result.data[0]['id'])
+                ).execute()
+                
+                if not result.data:
+                    raise Exception("Failed to create refinement assets")
+                
+                variation_asset_ids = [item['asset_id'] for item in result.data]
                 
                 # 6. Start background generation for all variations
                 generation_tasks = []
@@ -106,8 +114,35 @@ class SimpleRefinementService:
                     )
                     generation_tasks.append(task)
                 
-                # Start all generations in parallel (don't wait for completion)
-                asyncio.gather(*generation_tasks, return_exceptions=True)
+                # Start all generations in parallel with proper error handling
+                async def monitor_generations():
+                    """Monitor background generation tasks and handle errors."""
+                    try:
+                        results = await asyncio.gather(*generation_tasks, return_exceptions=True)
+                        for i, result in enumerate(results):
+                            if isinstance(result, Exception):
+                                asset_id_failed = variation_asset_ids[i]
+                                logger.error(f"Background generation for asset {asset_id_failed} failed: {result}")
+                                
+                                # Update asset status to failed
+                                try:
+                                    supabase_service.client.table('generated_assets')\
+                                        .update({
+                                            'status': 'failed',
+                                            'error_message': str(result),
+                                            'updated_at': 'NOW()'
+                                        })\
+                                        .eq('id', asset_id_failed)\
+                                        .execute()
+                                except Exception as update_error:
+                                    logger.error(f"Failed to update asset {asset_id_failed} status: {update_error}")
+                            else:
+                                logger.info(f"Successfully completed background generation for variation {i+1}")
+                    except Exception as monitor_error:
+                        logger.error(f"Error in generation monitoring: {monitor_error}")
+                
+                # Schedule the monitoring task
+                asyncio.create_task(monitor_generations())
                 
                 logger.info(f"Successfully started refinement generation for {len(variation_asset_ids)} variations")
                 

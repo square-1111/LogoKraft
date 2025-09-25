@@ -21,6 +21,7 @@ from app.services.supabase_service import supabase_service
 from app.services.orchestrator_service import OrchestratorService
 from app.services.simple_refinement_service import simple_refinement_service
 from app.routes.auth_routes import get_current_user
+from app.middleware.rate_limiter import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +412,7 @@ async def stream_project_updates(
     summary="Refine selected logo with simple prompt",
     description="Generate 5 variations of a selected logo using optional refinement prompt. Costs 5 credits."
 )
+@rate_limit(limit=5, window=300, tokens=5)  # 5 refinements per 5 minutes (expensive operation)
 async def simple_refine_logo(
     asset_id: str,
     request: SimpleRefinementRequest,
@@ -537,7 +539,7 @@ async def stream_refinement_progress(
                         "message": f"Connected to refinement updates for asset {asset_id}"
                     }
                 )
-                yield f"data: {initial_message.model_dump_json()}\\n\\n"
+                yield f"data: {initial_message.model_dump_json()}\n\n"
                 
                 # Monitor refinement progress
                 last_progress_state = {}
@@ -567,7 +569,7 @@ async def stream_refinement_progress(
                                     "completed_variations": progress.get('completed_variations', [])
                                 }
                             )
-                            yield f"data: {progress_message.model_dump_json()}\\n\\n"
+                            yield f"data: {progress_message.model_dump_json()}\n\n"
                             
                             last_progress_state = current_state
                             
@@ -589,7 +591,7 @@ async def stream_refinement_progress(
                                 "message": "An error occurred while monitoring refinement progress"
                             }
                         )
-                        yield f"data: {error_message.model_dump_json()}\\n\\n"
+                        yield f"data: {error_message.model_dump_json()}\n\n"
                         await asyncio.sleep(5)  # Wait before retrying
                         
                 # Send final completion message
@@ -601,7 +603,7 @@ async def stream_refinement_progress(
                         "message": "Refinement monitoring complete"
                     }
                 )
-                yield f"data: {final_message.model_dump_json()}\\n\\n"
+                yield f"data: {final_message.model_dump_json()}\n\n"
                         
             except Exception as e:
                 logger.error(f"Fatal error in refinement SSE stream: {e}")
@@ -613,7 +615,7 @@ async def stream_refinement_progress(
                         "message": "Stream has been terminated due to an error"
                     }
                 )
-                yield f"data: {final_message.model_dump_json()}\\n\\n"
+                yield f"data: {final_message.model_dump_json()}\n\n"
         
         return StreamingResponse(
             generate_refinement_stream(),
