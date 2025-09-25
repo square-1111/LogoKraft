@@ -132,6 +132,32 @@ class SimpleRefinementResponse(BaseModel):
     status: str = Field(..., description="Refinement status: generating, completed, failed")
     message: str = Field(..., description="Human-readable status message")
 
+# Brand Kit Models
+
+class BrandKitPurchaseRequest(BaseModel):
+    """Request model for brand kit purchase."""
+    selected_asset_id: str = Field(..., description="ID of the logo to use for brand kit generation")
+    payment_reference: Optional[str] = Field(None, description="Payment provider reference (e.g., Stripe payment intent ID)")
+
+class BrandKitOrderResponse(BaseModel):
+    """Response model for brand kit order."""
+    order_id: str = Field(..., description="Unique brand kit order ID")
+    status: str = Field(..., description="Order status: pending, processing, completed, failed")
+    progress: Dict[str, Any] = Field(..., description="Generation progress information")
+    components: Dict[str, Any] = Field(default_factory=dict, description="Generated component URLs and metadata")
+    payment_amount: float = Field(..., description="Payment amount in USD")
+    created_at: datetime = Field(..., description="Order creation timestamp")
+    completed_at: Optional[datetime] = Field(None, description="Order completion timestamp")
+    error_message: Optional[str] = Field(None, description="Error message if generation failed")
+
+class BrandKitCreateResponse(BaseModel):
+    """Response model for brand kit creation."""
+    order_id: str = Field(..., description="Unique brand kit order ID")
+    status: str = Field(..., description="Initial order status")
+    estimated_completion_minutes: int = Field(..., description="Estimated time to completion")
+    message: str = Field(..., description="Human-readable status message")
+    components: List[str] = Field(..., description="List of components being generated")
+
 # Error Models
 
 class ErrorResponse(BaseModel):
