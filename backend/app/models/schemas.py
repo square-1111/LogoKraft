@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # Authentication Models
@@ -24,6 +24,23 @@ class AuthResponse(BaseModel):
     user: UserResponse = Field(..., description="User information")
     access_token: Optional[str] = Field(None, description="JWT access token")
     refresh_token: Optional[str] = Field(None, description="JWT refresh token")
+
+# Brand Models
+
+class BrandInfo(BaseModel):
+    """Model for brand information used in prompt generation - Designer-Led approach."""
+    company_name: str = Field(..., description="Company or brand name")
+    industry: str = Field(..., description="Industry or business sector")
+    description: Optional[str] = Field(None, description="Company description")
+    # style_preferences REMOVED - We are the designers
+    # brand_personality REMOVED - We infer this
+    inspirations: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="Inspiration references with analysis")
+
+class CreativeBrief(BaseModel):
+    """Internal model for structured creative briefs from APEX-7."""
+    concept_title: str = Field(..., description="High-level brand concept")
+    studio: str = Field(..., description="Design studio executing this concept (Helios, '78, Apex)")
+    prompt: str = Field(..., description="Full prompt for image generation")
 
 # Project Models
 

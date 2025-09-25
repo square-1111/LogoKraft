@@ -26,7 +26,9 @@ class ImageGenerationService:
     
     def __init__(self):
         """Initialize with fal.ai client and Supabase service."""
-        self.fal_api_url = "https://fal.run/fal-ai/bytedance/seedream/v4/text-to-image"
+        # Use model IDs from settings for flexibility
+        self.text_to_image_model = settings.fal_text_to_image_model
+        self.image_to_image_model = settings.fal_image_to_image_model
         self.fal_key = settings.fal_key
         self.supabase_service = SupabaseService()
         
@@ -291,7 +293,7 @@ class ImageGenerationService:
             # Use fal_client.subscribe for automatic queue handling
             result = await asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/bytedance/seedream/v4/text-to-image",
+                self.text_to_image_model,
                 arguments={
                     "prompt": prompt,
                     "image_size": {
@@ -322,6 +324,110 @@ class ImageGenerationService:
         except Exception as e:
             logger.error(f"fal_client generation failed: {str(e)}")
             return None
+    
+    async def generate_variation(
+        self,
+        original_image_url: str,
+        modification_prompt: str,
+        asset_id: str
+    ) -> bool:
+        """
+        Generate a variation of an existing logo using Seedream Edit (image-to-image).
+        
+        Args:
+            original_image_url: URL of the original image to modify
+            modification_prompt: Description of the changes to make
+            asset_id: Database ID of the new asset being generated
+            
+        Returns:
+            True if generation and upload successful, False otherwise
+        """
+        try:
+            # Update status to generating
+            await self.update_asset_status(asset_id, "generating")
+            
+            logger.info(f"Generating variation for asset {asset_id} with prompt: {modification_prompt[:100]}...")
+            
+            # Download original image
+            async with httpx.AsyncClient() as client:
+                response = await client.get(original_image_url)
+                response.raise_for_status()
+                original_image_data = response.content
+            
+            # Convert to base64 for API
+            import base64
+            image_base64 = base64.b64encode(original_image_data).decode('utf-8')
+            image_data_url = f"data:image/png;base64,{image_base64}"
+            
+            # Generate variation using Seedream Edit
+            result = await asyncio.to_thread(
+                fal_client.subscribe,
+                self.image_to_image_model,
+                arguments={
+                    "image_url": image_data_url,  # Base64 data URL
+                    "prompt": modification_prompt,
+                    "image_size": {
+                        "height": settings.logo_image_size,
+                        "width": settings.logo_image_size
+                    },
+                    "num_images": 1,
+                    "strength": 0.7,  # How much to modify (0=no change, 1=complete change)
+                    "enable_safety_checker": True
+                },
+                with_logs=False
+            )
+            
+            # Extract image from result
+            if result and "images" in result and len(result["images"]) > 0:
+                image_url = result["images"][0]["url"]
+                logger.info(f"Generated variation image URL: {image_url}")
+                
+                # Download the generated image
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(image_url)
+                    response.raise_for_status()
+                    image_data = response.content
+            else:
+                logger.error("No images in variation response")
+                await self.update_asset_status(
+                    asset_id,
+                    "failed",
+                    error_message="No images in variation response"
+                )
+                return False
+            
+            # Generate unique filename
+            filename = f"logo_variation_{asset_id}_{uuid.uuid4().hex[:8]}.png"
+            
+            # Upload to Supabase storage
+            asset_url = await self.upload_to_storage(image_data, filename)
+            
+            if not asset_url:
+                await self.update_asset_status(
+                    asset_id,
+                    "failed",
+                    error_message="Failed to upload variation to storage"
+                )
+                return False
+            
+            # Update database with success
+            await self.update_asset_status(
+                asset_id,
+                "completed",
+                asset_url=asset_url
+            )
+            
+            logger.info(f"Successfully generated and uploaded variation for asset {asset_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate variation for asset {asset_id}: {str(e)}")
+            await self.update_asset_status(
+                asset_id,
+                "failed",
+                error_message=str(e)
+            )
+            return False
     
     async def close(self):
         """Close HTTP client when service is done."""

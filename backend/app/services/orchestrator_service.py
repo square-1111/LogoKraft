@@ -9,9 +9,10 @@ import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from app.services.gemini_service import GeminiService
 from app.services.image_generation_service import ImageGenerationService
+from app.services.prompt_engineering_service import PromptEngineeringService
 from app.services.supabase_service import SupabaseService
+from app.models.schemas import BrandInfo
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -19,21 +20,13 @@ logger = logging.getLogger(__name__)
 class OrchestratorService:
     """
     Service that orchestrates the complete AI workflow for logo generation.
-    Coordinates Gemini prompt generation and Seedream image generation.
+    Coordinates APEX-7 prompt generation and Seedream image generation.
     """
-    
-    # Logo archetype distribution as per strategy
-    ASSET_TYPES = {
-        "abstract_mark": 4,      # Geometric/organic symbols
-        "lettermark": 3,         # Stylized initials
-        "wordmark": 3,           # Company name typography
-        "combination_mark": 3,   # Symbol + name
-        "pictorial_mark": 2      # Literal representation
-    }
     
     def __init__(self):
         """Initialize with AI services and database connection."""
-        self.gemini_service = GeminiService()
+        # APEX-7 handles all Gemini interactions (prompts + image analysis)
+        self.prompt_service = PromptEngineeringService()
         self.image_service = ImageGenerationService()
         self.supabase_service = SupabaseService()
     
@@ -65,17 +58,26 @@ class OrchestratorService:
             inspiration_analysis = ""
             if project_data.get("inspiration_image_url"):
                 logger.info("Analyzing inspiration image...")
-                inspiration_analysis = await self.gemini_service.analyze_inspiration_image(
+                # APEX-7 service handles image analysis
+                inspiration_analysis = await self.prompt_service.analyze_inspiration_image(
                     project_data["inspiration_image_url"]
                 )
                 logger.info(f"Inspiration analysis: {inspiration_analysis[:100]}...")
             
-            # Step 3: Generate 15 diverse prompts
-            logger.info("Generating 15 diverse logo prompts...")
-            prompts = await self.gemini_service.create_prompts_from_brief(
-                project_data,
-                inspiration_analysis
+            # Step 3: Generate 15 diverse prompts using APEX-7 Multi-Studio Framework
+            logger.info("🎨 Invoking APEX-7 Creative Direction Engine...")
+            
+            # Convert project data to BrandInfo (simplified - no style fields)
+            brief_data = project_data.get("brief_data", {})
+            brand_info = BrandInfo(
+                company_name=brief_data.get("company_name", project_data.get("project_name", "")),
+                industry=brief_data.get("industry", "General Business"),
+                description=brief_data.get("description"),
+                # style_preferences and brand_personality REMOVED
+                inspirations=[{"analysis": inspiration_analysis}] if inspiration_analysis else []
             )
+            
+            prompts = self.prompt_service.generate_prompts(brand_info)
             
             if len(prompts) != 15:
                 logger.warning(f"Expected 15 prompts, got {len(prompts)}")
@@ -87,11 +89,19 @@ class OrchestratorService:
                 logger.error("Mismatch between prompts and asset IDs")
                 return
             
-            # Step 5: Launch background tasks for image generation
-            logger.info(f"Launching {len(prompts)} image generation tasks...")
-            await self._launch_generation_tasks(prompts, asset_ids)
+            # Step 5: Use batch generation service for better performance
+            logger.info(f"Launching APEX-7 Portfolio Generation: {len(prompts)} concepts...")
             
-            logger.info(f"Logo generation workflow initiated for project {project_id}")
+            # Import here to avoid circular dependency
+            from app.services.batch_image_generation_service import BatchImageGenerationService
+            batch_service = BatchImageGenerationService()
+            
+            # Launch batch generation as background task
+            asyncio.create_task(
+                batch_service.generate_logos_batch(prompts, asset_ids, project_id)
+            )
+            
+            logger.info(f"✅ APEX-7 Creative Portfolio workflow initiated for project {project_id}")
             
         except Exception as e:
             logger.error(f"Failed to start logo generation for project {project_id}: {str(e)}")

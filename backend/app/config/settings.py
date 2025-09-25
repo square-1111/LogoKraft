@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     
     # fal.ai API Configuration (Seedream v4)
     fal_key: str
+    fal_text_to_image_model: str = "fal-ai/nano-banana"
+    fal_image_to_image_model: str = "fal-ai/bytedance/seedream/v4/edit"
     
     # Additional AI Configuration
-    nano_banana_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.5-pro"
     max_concurrent_generations: int = 8  # fal.ai limit: 10 concurrent tasks (safe buffer)
     generation_timeout: int = 300  # 5 minutes

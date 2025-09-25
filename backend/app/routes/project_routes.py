@@ -35,28 +35,31 @@ router = APIRouter(
 @router.post("",
     response_model=ProjectCreateResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create new project",
-    description="Create a new brand project and start AI logo generation. Optionally upload an inspiration image. Returns immediately while AI processing runs in background."
+    summary="Create new project with APEX-7",
+    description="Create a new brand project and start APEX-7 Creative Direction workflow. Simplified Designer-Led approach - we handle the creative strategy."
 )
 async def create_project(
-    project_name: str = Form(..., description="Name of the project"),
-    brief_data: str = Form(..., description="JSON string of project brief data"),
+    # SIMPLIFIED FORM FIELDS - Designer-Led Approach
+    company_name: str = Form(..., description="Company or brand name"),
+    industry: str = Form(..., description="Industry or business sector"),
+    description: str = Form("", description="Company description (optional)"),
     inspiration_image: Optional[UploadFile] = File(None, description="Optional inspiration image"),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
-    Create a new brand project with optional inspiration image and start AI generation.
+    Create a new brand project using the APEX-7 Designer-Led approach.
     
     This endpoint:
-    1. Parses the project data and validates it
+    1. Takes only essential brand information (name, industry, description)
     2. Uploads inspiration image to storage if provided
-    3. Creates a project record in the database
-    4. Triggers AI logo generation workflow in background
-    5. Returns immediately while generation runs asynchronously
+    3. Creates a project record in the database 
+    4. Triggers APEX-7 Creative Direction workflow in background
+    5. Returns immediately while 15 elite concepts are generated
     
     Args:
-        project_name: Name of the project
-        brief_data: JSON string containing project brief information
+        company_name: Company or brand name
+        industry: Industry or business sector
+        description: Optional company description
         inspiration_image: Optional uploaded image file
         current_user: Authenticated user from JWT token
         
@@ -67,22 +70,27 @@ async def create_project(
         HTTPException: If validation or creation fails
     """
     try:
-        logger.info(f"Creating project '{project_name}' for user {current_user.id}")
+        project_name = company_name  # Use company name as project name
+        logger.info(f"🎨 Creating APEX-7 project '{project_name}' for user {current_user.id}")
         
-        # Parse and validate brief_data JSON
-        try:
-            parsed_brief_data = json.loads(brief_data)
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid JSON in brief_data field"
-            )
+        # Structure the simplified brief data (Designer-Led approach)
+        brief_data = {
+            "company_name": company_name,
+            "industry": industry,
+            "description": description
+            # style_preferences and brand_personality REMOVED - We are the designers
+        }
         
         # Validate required fields
-        if not project_name.strip():
+        if not company_name.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Project name cannot be empty"
+                detail="Company name cannot be empty"
+            )
+        if not industry.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Industry cannot be empty"
             )
         
         # Handle inspiration image upload if provided
@@ -116,7 +124,7 @@ async def create_project(
         # Create project in database
         project_data = {
             "project_name": project_name.strip(),
-            "brief_data": parsed_brief_data,
+            "brief_data": brief_data,  # Use the simplified brief_data
             "inspiration_image_url": inspiration_image_url
         }
         
@@ -125,9 +133,9 @@ async def create_project(
             project_data=project_data
         )
         
-        logger.info(f"Project created successfully: {created_project['id']}")
+        logger.info(f"✅ Project created successfully: {created_project['id']}")
         
-        # NEW: Trigger AI logo generation workflow in background
+        # Trigger APEX-7 Creative Direction workflow in background
         orchestrator = OrchestratorService()
         asyncio.create_task(
             orchestrator.start_logo_generation(created_project['id'])
@@ -135,7 +143,7 @@ async def create_project(
         
         return ProjectCreateResponse(
             project=ProjectResponse(**created_project),
-            message="Project created successfully. AI logo generation has started!" 
+            message=f"Project '{company_name}' created. APEX-7 is generating 15 elite design concepts!"
         )
         
     except HTTPException:
