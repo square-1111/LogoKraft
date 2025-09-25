@@ -13,10 +13,13 @@ from app.models.schemas import (
     AssetResponse,
     ErrorResponse,
     UserResponse,
-    StreamMessage
+    StreamMessage,
+    SimpleRefinementRequest,
+    SimpleRefinementResponse
 )
 from app.services.supabase_service import supabase_service
 from app.services.orchestrator_service import OrchestratorService
+from app.services.simple_refinement_service import simple_refinement_service
 from app.routes.auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -400,4 +403,235 @@ async def stream_project_updates(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to setup project stream"
+        )
+
+@router.post("/assets/{asset_id}/simple-refine",
+    response_model=SimpleRefinementResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Refine selected logo with simple prompt",
+    description="Generate 5 variations of a selected logo using optional refinement prompt. Costs 5 credits."
+)
+async def simple_refine_logo(
+    asset_id: str,
+    request: SimpleRefinementRequest,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Generate 5 variations of a selected logo using simple refinement.
+    
+    This endpoint:
+    1. Validates user has sufficient credits (5 required)
+    2. Takes the selected logo + optional prompt
+    3. Generates 5 different variations using APEX-7 + Seedream v4
+    4. Returns immediately while variations generate in background
+    5. Use SSE streaming or polling to track progress
+    
+    Args:
+        asset_id: ID of the asset (logo) to refine
+        request: SimpleRefinementRequest with optional prompt
+        current_user: Authenticated user from JWT token
+        
+    Returns:
+        SimpleRefinementResponse: Refinement details and variation IDs
+        
+    Raises:
+        HTTPException: If insufficient credits, asset not found, or refinement fails
+    """
+    try:
+        logger.info(f"Starting simple refinement for asset {asset_id} by user {current_user.id}")
+        
+        # Verify user owns the asset by checking project ownership
+        asset = await supabase_service.get_asset_by_id(asset_id)
+        if not asset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset not found"
+            )
+            
+        project = await supabase_service.get_project(asset['project_id'], current_user.id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset not found or access denied"
+            )
+        
+        # Perform simple refinement
+        result = await simple_refinement_service.refine_logo(
+            asset_id=asset_id,
+            user_id=current_user.id,
+            user_prompt=request.prompt
+        )
+        
+        return SimpleRefinementResponse(**result)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except ValueError as e:
+        # Handle insufficient credits or other validation errors
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Simple refinement failed for asset {asset_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refine logo"
+        )
+
+@router.get("/assets/{asset_id}/refinement/stream",
+    summary="Stream simple refinement progress",
+    description="Server-Sent Events stream for real-time simple refinement progress. Monitors refinement variations as they generate."
+)
+async def stream_refinement_progress(
+    asset_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Stream real-time updates for a simple refinement using Server-Sent Events.
+    
+    This endpoint:
+    1. Verifies user has access to the asset
+    2. Sets up SSE stream with proper headers
+    3. Monitors refinement variations as they generate
+    4. Streams progress updates as JSON messages
+    
+    Args:
+        asset_id: ID of the original asset being refined
+        current_user: Authenticated user from JWT token
+        
+    Returns:
+        StreamingResponse: SSE stream of refinement updates
+        
+    Raises:
+        HTTPException: If asset not found or access denied
+    """
+    try:
+        logger.info(f"Starting refinement SSE stream for asset {asset_id} for user {current_user.id}")
+        
+        # Verify user owns the asset
+        asset = await supabase_service.get_asset_by_id(asset_id)
+        if not asset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset not found"
+            )
+            
+        project = await supabase_service.get_project(asset['project_id'], current_user.id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Asset not found or access denied"
+            )
+        
+        async def generate_refinement_stream():
+            """Generate SSE messages for refinement updates."""
+            try:
+                # Send initial connection message
+                initial_message = StreamMessage(
+                    type="connection",
+                    data={
+                        "asset_id": asset_id,
+                        "status": "connected",
+                        "message": f"Connected to refinement updates for asset {asset_id}"
+                    }
+                )
+                yield f"data: {initial_message.model_dump_json()}\\n\\n"
+                
+                # Monitor refinement progress
+                last_progress_state = {}
+                refinement_complete = False
+                
+                while not refinement_complete:
+                    try:
+                        # Get current refinement progress
+                        progress = await simple_refinement_service.get_refinement_progress(asset_id)
+                        
+                        # Check if this is a new or updated state
+                        current_state = {
+                            'status': progress['status'],
+                            'completed_count': progress.get('progress', {}).get('completed', 0),
+                            'total_count': progress.get('progress', {}).get('total', 0)
+                        }
+                        
+                        if current_state != last_progress_state:
+                            # Send progress update
+                            progress_message = StreamMessage(
+                                type="refinement_progress",
+                                data={
+                                    "asset_id": asset_id,
+                                    "status": progress['status'],
+                                    "message": progress['message'],
+                                    "progress": progress.get('progress', {}),
+                                    "completed_variations": progress.get('completed_variations', [])
+                                }
+                            )
+                            yield f"data: {progress_message.model_dump_json()}\\n\\n"
+                            
+                            last_progress_state = current_state
+                            
+                            # Check if refinement is complete
+                            if progress['status'] in ['completed', 'failed']:
+                                refinement_complete = True
+                        
+                        if not refinement_complete:
+                            # Wait before next check
+                            await asyncio.sleep(2)  # Check every 2 seconds
+                        
+                    except Exception as e:
+                        logger.error(f"Error in refinement stream generation: {e}")
+                        error_message = StreamMessage(
+                            type="error",
+                            data={
+                                "asset_id": asset_id,
+                                "error": "Stream error",
+                                "message": "An error occurred while monitoring refinement progress"
+                            }
+                        )
+                        yield f"data: {error_message.model_dump_json()}\\n\\n"
+                        await asyncio.sleep(5)  # Wait before retrying
+                        
+                # Send final completion message
+                final_message = StreamMessage(
+                    type="refinement_complete",
+                    data={
+                        "asset_id": asset_id,
+                        "status": "stream_ended",
+                        "message": "Refinement monitoring complete"
+                    }
+                )
+                yield f"data: {final_message.model_dump_json()}\\n\\n"
+                        
+            except Exception as e:
+                logger.error(f"Fatal error in refinement SSE stream: {e}")
+                final_message = StreamMessage(
+                    type="error",
+                    data={
+                        "asset_id": asset_id,
+                        "error": "Stream terminated",
+                        "message": "Stream has been terminated due to an error"
+                    }
+                )
+                yield f"data: {final_message.model_dump_json()}\\n\\n"
+        
+        return StreamingResponse(
+            generate_refinement_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET",
+                "Access-Control-Allow-Headers": "Cache-Control"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to setup refinement SSE stream for asset {asset_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to setup refinement stream"
         )

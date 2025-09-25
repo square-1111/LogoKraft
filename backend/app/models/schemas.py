@@ -112,6 +112,20 @@ class StreamMessage(BaseModel):
             }
         }
 
+# Simple Refinement Models
+
+class SimpleRefinementRequest(BaseModel):
+    """Request model for simple logo refinement."""
+    prompt: Optional[str] = Field(None, description="Optional text prompt for refinement (e.g., 'make it more modern')")
+
+class SimpleRefinementResponse(BaseModel):
+    """Response model for simple refinement."""
+    original_asset_id: str = Field(..., description="ID of the original asset being refined")
+    variation_asset_ids: List[str] = Field(..., description="List of IDs for the 5 generated variations")
+    credits_used: int = Field(..., description="Number of credits deducted")
+    status: str = Field(..., description="Refinement status: generating, completed, failed")
+    message: str = Field(..., description="Human-readable status message")
+
 # Error Models
 
 class ErrorResponse(BaseModel):

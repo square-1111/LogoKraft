@@ -202,6 +202,23 @@ class SupabaseService:
             logger.error(f"Failed to get assets for project {project_id}: {e}")
             return []
     
+    async def get_asset_by_id(self, asset_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a single asset by its ID.
+        
+        Args:
+            asset_id: Asset ID to retrieve
+            
+        Returns:
+            Asset record or None if not found
+        """
+        try:
+            response = self.client.table("generated_assets").select("*").eq("id", asset_id).single().execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Failed to get asset {asset_id}: {e}")
+            return None
+    
     # File Upload Methods
     
     async def upload_inspiration_image(self, file_content: bytes, filename: str, user_id: str) -> str:

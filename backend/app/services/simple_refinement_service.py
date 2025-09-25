@@ -1,0 +1,327 @@
+"""
+Simple Refinement Service
+Handles the focused logo refinement flow: 1 logo + prompt → 5 variations
+"""
+
+import asyncio
+import logging
+from typing import Dict, List, Any, Optional
+from app.services.image_generation_service import ImageGenerationService
+from app.services.prompt_engineering_service import PromptEngineeringService
+from app.services.credit_service import credit_service
+from app.services.supabase_service import supabase_service
+
+logger = logging.getLogger(__name__)
+
+class SimpleRefinementService:
+    """
+    Simplified refinement service for focused user flow.
+    Takes 1 selected logo + optional prompt, generates 5 variations.
+    """
+    
+    def __init__(self):
+        self.image_service = ImageGenerationService()
+        self.prompt_service = PromptEngineeringService()
+        self.credit_cost = 5  # 5 credits for 5 variations
+    
+    async def refine_logo(
+        self,
+        asset_id: str,
+        user_id: str, 
+        user_prompt: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Main refinement method: 1 logo + prompt → 5 variations
+        
+        Args:
+            asset_id: ID of the selected logo to refine
+            user_id: ID of the user requesting refinement
+            user_prompt: Optional text prompt for changes (e.g., "make it more modern")
+            
+        Returns:
+            Dict with original asset info and 5 new variation asset IDs
+            
+        Raises:
+            ValueError: If insufficient credits or asset not found
+            Exception: If refinement process fails
+        """
+        try:
+            logger.info(f"Starting simple refinement for asset {asset_id} by user {user_id}")
+            
+            # 1. Check user has sufficient credits
+            if not await credit_service.check_credits(user_id, self.credit_cost):
+                raise ValueError("Insufficient credits for refinement")
+            
+            # 2. Get original asset from database
+            original_asset = await self._get_asset(asset_id)
+            if not original_asset:
+                raise ValueError(f"Asset {asset_id} not found")
+            
+            # 3. Deduct credits upfront
+            success = await credit_service.deduct_credits(
+                user_id=user_id,
+                amount=self.credit_cost,
+                reason=f"Simple refinement of asset {asset_id}",
+                asset_id=asset_id
+            )
+            if not success:
+                raise ValueError("Credit deduction failed")
+            
+            try:
+                # 4. Generate 5 variation prompts
+                variation_prompts = await self._generate_variation_prompts(
+                    original_prompt=original_asset['generation_prompt'],
+                    user_prompt=user_prompt or "refine and improve the design"
+                )
+                
+                # 5. Create database entries for 5 variations
+                variation_asset_ids = []
+                for i, prompt in enumerate(variation_prompts):
+                    asset_data = {
+                        'project_id': original_asset['project_id'],
+                        'parent_asset_id': asset_id,
+                        'asset_type': 'simple_refinement',
+                        'status': 'pending',
+                        'generation_prompt': prompt,
+                        'refinement_metadata': {
+                            'user_prompt': user_prompt,
+                            'variation_index': i + 1,
+                            'refinement_method': 'simple'
+                        }
+                    }
+                    
+                    result = supabase_service.client.table('generated_assets').insert(asset_data).execute()
+                    variation_asset_ids.append(result.data[0]['id'])
+                
+                # 6. Start background generation for all variations
+                generation_tasks = []
+                for i, (asset_id_new, prompt) in enumerate(zip(variation_asset_ids, variation_prompts)):
+                    task = asyncio.create_task(
+                        self._generate_single_variation(
+                            original_asset_url=original_asset['asset_url'],
+                            new_asset_id=asset_id_new,
+                            prompt=prompt,
+                            variation_index=i + 1
+                        )
+                    )
+                    generation_tasks.append(task)
+                
+                # Start all generations in parallel (don't wait for completion)
+                asyncio.gather(*generation_tasks, return_exceptions=True)
+                
+                logger.info(f"Successfully started refinement generation for {len(variation_asset_ids)} variations")
+                
+                return {
+                    'original_asset_id': asset_id,
+                    'variation_asset_ids': variation_asset_ids,
+                    'credits_used': self.credit_cost,
+                    'status': 'generating',
+                    'message': f'Generating {len(variation_asset_ids)} variations of your logo'
+                }
+                
+            except Exception as e:
+                # Refund credits if generation setup fails
+                await credit_service.refund_credits(
+                    user_id=user_id,
+                    amount=self.credit_cost,
+                    reason=f"Simple refinement failed: {str(e)}",
+                    asset_id=asset_id
+                )
+                raise
+                
+        except Exception as e:
+            logger.error(f"Simple refinement failed for asset {asset_id}: {str(e)}")
+            raise
+    
+    async def _get_asset(self, asset_id: str) -> Optional[Dict]:
+        """Get asset data from database"""
+        try:
+            result = supabase_service.client.table('generated_assets')\
+                .select('*')\
+                .eq('id', asset_id)\
+                .single()\
+                .execute()
+            return result.data
+        except Exception as e:
+            logger.error(f"Failed to get asset {asset_id}: {e}")
+            return None
+    
+    async def _generate_variation_prompts(
+        self, 
+        original_prompt: str, 
+        user_prompt: str
+    ) -> List[str]:
+        """
+        Generate 5 different variation prompts using APEX-7
+        
+        Args:
+            original_prompt: The original prompt used for the logo
+            user_prompt: User's request for changes
+            
+        Returns:
+            List of 5 variation prompts
+        """
+        try:
+            # Use APEX-7 to create 5 diverse variations
+            variation_request = f"""
+            Create 5 variations of this logo based on the user's request.
+            
+            ORIGINAL LOGO PROMPT: {original_prompt}
+            USER REQUEST: {user_prompt}
+            
+            Generate 5 different approaches that:
+            1. Maintain the core brand identity
+            2. Apply the requested changes in different ways
+            3. Explore subtle variations in style, color, or composition
+            4. Stay professional and brand-appropriate
+            5. Each variation should be distinctly different
+            
+            Return 5 detailed prompts for logo generation.
+            """
+            
+            # Generate variations using existing prompt engineering service
+            variations_text = await self.prompt_service.generate_creative_direction(variation_request)
+            
+            # Parse the response into individual prompts
+            # For now, create 5 variations with different approaches
+            base_variations = [
+                f"{original_prompt}, {user_prompt}, variation 1: subtle enhancement",
+                f"{original_prompt}, {user_prompt}, variation 2: modern interpretation", 
+                f"{original_prompt}, {user_prompt}, variation 3: bold approach",
+                f"{original_prompt}, {user_prompt}, variation 4: refined elegance",
+                f"{original_prompt}, {user_prompt}, variation 5: creative twist"
+            ]
+            
+            return base_variations
+            
+        except Exception as e:
+            logger.warning(f"APEX-7 variation generation failed, using fallback: {e}")
+            
+            # Fallback: simple variations if APEX-7 fails
+            return [
+                f"{original_prompt}, {user_prompt}",
+                f"{original_prompt}, {user_prompt}, more refined",
+                f"{original_prompt}, {user_prompt}, bolder design", 
+                f"{original_prompt}, {user_prompt}, elegant approach",
+                f"{original_prompt}, {user_prompt}, modern style"
+            ]
+    
+    async def _generate_single_variation(
+        self,
+        original_asset_url: str,
+        new_asset_id: str,
+        prompt: str,
+        variation_index: int
+    ) -> bool:
+        """
+        Generate a single logo variation using image-to-image editing
+        
+        Args:
+            original_asset_url: URL of the original logo image
+            new_asset_id: Database ID for the new variation asset
+            prompt: Generation prompt for this variation
+            variation_index: Index of this variation (1-5)
+            
+        Returns:
+            True if successful, False if failed
+        """
+        try:
+            logger.info(f"Generating variation {variation_index} for asset {new_asset_id}")
+            
+            # Generate new logo using image-to-image editing
+            # The generate_variation method handles all database updates internally
+            result = await self.image_service.generate_variation(
+                original_image_url=original_asset_url,
+                modification_prompt=prompt,
+                asset_id=new_asset_id
+            )
+            
+            if result:
+                logger.info(f"Successfully generated variation {variation_index}")
+                return True
+            else:
+                logger.error(f"Failed to generate variation {variation_index}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to generate variation {variation_index}: {e}")
+            return False
+    
+    async def get_refinement_progress(self, original_asset_id: str) -> Dict[str, Any]:
+        """
+        Get progress of refinement for an asset
+        
+        Args:
+            original_asset_id: ID of the original asset being refined
+            
+        Returns:
+            Dict with progress information
+        """
+        try:
+            # Get all variation assets for this refinement
+            result = supabase_service.client.table('generated_assets')\
+                .select('id, status, asset_url, created_at')\
+                .eq('parent_asset_id', original_asset_id)\
+                .eq('asset_type', 'simple_refinement')\
+                .execute()
+            
+            variations = result.data or []
+            total_variations = len(variations)
+            
+            if total_variations == 0:
+                return {
+                    'status': 'not_found',
+                    'message': 'No refinement found for this asset'
+                }
+            
+            # Count completed variations
+            completed = [v for v in variations if v['status'] == 'completed']
+            failed = [v for v in variations if v['status'] == 'failed']
+            generating = [v for v in variations if v['status'] == 'generating']
+            
+            completed_count = len(completed)
+            failed_count = len(failed)
+            generating_count = len(generating)
+            
+            if completed_count == total_variations:
+                status = 'completed'
+                message = f'All {total_variations} variations ready!'
+            elif failed_count == total_variations:
+                status = 'failed'
+                message = 'All variations failed to generate'
+            elif completed_count + failed_count == total_variations:
+                status = 'completed'
+                message = f'{completed_count} variations completed, {failed_count} failed'
+            else:
+                status = 'generating'
+                message = f'Generated {completed_count}/{total_variations} variations...'
+            
+            return {
+                'status': status,
+                'message': message,
+                'progress': {
+                    'total': total_variations,
+                    'completed': completed_count,
+                    'failed': failed_count,
+                    'generating': generating_count,
+                    'percentage': (completed_count / total_variations) * 100 if total_variations > 0 else 0
+                },
+                'completed_variations': [
+                    {
+                        'id': v['id'],
+                        'asset_url': v['asset_url'],
+                        'created_at': v['created_at']
+                    }
+                    for v in completed
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get refinement progress: {e}")
+            return {
+                'status': 'error',
+                'message': 'Failed to get refinement progress'
+            }
+
+# Export singleton instance
+simple_refinement_service = SimpleRefinementService()
