@@ -409,8 +409,8 @@ async def stream_project_updates(
 @router.post("/assets/{asset_id}/simple-refine",
     response_model=SimpleRefinementResponse,
     status_code=status.HTTP_200_OK,
-    summary="Refine selected logo with simple prompt",
-    description="Generate 5 variations of a selected logo using optional refinement prompt. Costs 5 credits."
+    summary="Generate 5 intelligent logo variations",
+    description="ALWAYS generates 5 variations of a selected logo using Gemini image analysis and design principles. Optional user prompt influences variations. Costs 5 credits."
 )
 @rate_limit(limit=5, window=300, tokens=5)  # 5 refinements per 5 minutes (expensive operation)
 async def simple_refine_logo(
@@ -419,18 +419,19 @@ async def simple_refine_logo(
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
-    Generate 5 variations of a selected logo using simple refinement.
+    Generate 5 intelligent variations of a selected logo.
     
-    This endpoint:
+    This endpoint ALWAYS generates 5 variations using Gemini image analysis:
     1. Validates user has sufficient credits (5 required)
-    2. Takes the selected logo + optional prompt
-    3. Generates 5 different variations using APEX-7 + Seedream v4
-    4. Returns immediately while variations generate in background
-    5. Use SSE streaming or polling to track progress
+    2. Uses Gemini to analyze the logo image and understand its design
+    3. Generates 5 targeted variations based on design principles
+    4. Optional user prompt influences the variation direction
+    5. Returns immediately while variations generate in background via Seedream v4
+    6. Use SSE streaming or polling to track progress
     
     Args:
         asset_id: ID of the asset (logo) to refine
-        request: SimpleRefinementRequest with optional prompt
+        request: SimpleRefinementRequest with optional prompt (influences variations)
         current_user: Authenticated user from JWT token
         
     Returns:

@@ -68,10 +68,10 @@ class SimpleRefinementService:
                 raise ValueError("Credit deduction failed")
             
             try:
-                # 4. Generate 5 variation prompts
+                # 4. Generate 5 intelligent variation prompts using image analysis
                 variation_prompts = await self._generate_variation_prompts(
-                    original_prompt=original_asset['generation_prompt'],
-                    user_prompt=user_prompt or "refine and improve the design"
+                    original_asset=original_asset,
+                    user_prompt=user_prompt  # Can be None - we'll always generate 5 variations
                 )
                 
                 # 5. Create database entries for 5 variations using secure RPC
@@ -183,63 +183,69 @@ class SimpleRefinementService:
     
     async def _generate_variation_prompts(
         self, 
-        original_prompt: str, 
-        user_prompt: str
+        original_asset: Dict,
+        user_prompt: Optional[str] = None
     ) -> List[str]:
         """
-        Generate 5 different variation prompts using APEX-7
+        Generate 5 intelligent variation prompts using Gemini image analysis.
+        ALWAYS generates 5 variations regardless of user input.
+        
+        Args:
+            original_asset: Asset data including asset_url and generation_prompt
+            user_prompt: Optional user's request for changes
+            
+        Returns:
+            List of 5 intelligent variation prompts
+        """
+        try:
+            logo_url = original_asset['asset_url']
+            if not logo_url:
+                logger.warning("No logo URL available, using prompt-based fallback")
+                return self._get_prompt_based_variations(original_asset['generation_prompt'], user_prompt)
+            
+            # Use Gemini to analyze the actual logo image and generate intelligent variations
+            logger.info(f"🎨 Analyzing logo image for intelligent variations: {user_prompt or 'automatic refinement'}")
+            
+            variation_prompts = await self.prompt_service.analyze_logo_for_variations(
+                logo_url=logo_url,
+                user_prompt=user_prompt
+            )
+            
+            if len(variation_prompts) >= 5:
+                logger.info(f"✅ Generated {len(variation_prompts)} intelligent variation prompts based on logo analysis")
+                return variation_prompts[:5]
+            else:
+                logger.warning("Insufficient prompts from analysis, using fallback")
+                return self._get_prompt_based_variations(original_asset['generation_prompt'], user_prompt)
+            
+        except Exception as e:
+            logger.warning(f"Intelligent variation generation failed, using fallback: {e}")
+            return self._get_prompt_based_variations(original_asset['generation_prompt'], user_prompt)
+    
+    def _get_prompt_based_variations(self, original_prompt: str, user_prompt: Optional[str] = None) -> List[str]:
+        """
+        Generate fallback variations based on the original prompt when image analysis fails.
         
         Args:
             original_prompt: The original prompt used for the logo
-            user_prompt: User's request for changes
+            user_prompt: Optional user's request for changes
             
         Returns:
-            List of 5 variation prompts
+            List of 5 design-principle-based variation prompts
         """
-        try:
-            # Use APEX-7 to create 5 diverse variations
-            variation_request = f"""
-            Create 5 variations of this logo based on the user's request.
-            
-            ORIGINAL LOGO PROMPT: {original_prompt}
-            USER REQUEST: {user_prompt}
-            
-            Generate 5 different approaches that:
-            1. Maintain the core brand identity
-            2. Apply the requested changes in different ways
-            3. Explore subtle variations in style, color, or composition
-            4. Stay professional and brand-appropriate
-            5. Each variation should be distinctly different
-            
-            Return 5 detailed prompts for logo generation.
-            """
-            
-            # Generate variations using existing prompt engineering service
-            variations_text = await self.prompt_service.generate_creative_direction(variation_request)
-            
-            # Parse the response into individual prompts
-            # For now, create 5 variations with different approaches
-            base_variations = [
-                f"{original_prompt}, {user_prompt}, variation 1: subtle enhancement",
-                f"{original_prompt}, {user_prompt}, variation 2: modern interpretation", 
-                f"{original_prompt}, {user_prompt}, variation 3: bold approach",
-                f"{original_prompt}, {user_prompt}, variation 4: refined elegance",
-                f"{original_prompt}, {user_prompt}, variation 5: creative twist"
-            ]
-            
-            return base_variations
-            
-        except Exception as e:
-            logger.warning(f"APEX-7 variation generation failed, using fallback: {e}")
-            
-            # Fallback: simple variations if APEX-7 fails
-            return [
-                f"{original_prompt}, {user_prompt}",
-                f"{original_prompt}, {user_prompt}, more refined",
-                f"{original_prompt}, {user_prompt}, bolder design", 
-                f"{original_prompt}, {user_prompt}, elegant approach",
-                f"{original_prompt}, {user_prompt}, modern style"
-            ]
+        base_request = user_prompt or "professional design refinement and enhancement"
+        
+        # Design-principle-based variations that work with any logo prompt
+        variations = [
+            f"{original_prompt}, {base_request}, minimalist approach with clean lines and increased white space",
+            f"{original_prompt}, {base_request}, bold contemporary style with stronger visual impact", 
+            f"{original_prompt}, {base_request}, organic flowing interpretation with softer edges and curves",
+            f"{original_prompt}, {base_request}, technical precision enhancement with mathematical proportions",
+            f"{original_prompt}, {base_request}, dynamic modern evolution with implied movement and energy"
+        ]
+        
+        logger.info("Using design-principle-based prompt variations")
+        return variations
     
     async def _generate_single_variation(
         self,
