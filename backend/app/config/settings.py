@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     generation_timeout: int = 300  # 5 minutes
     logo_image_size: int = 2048  # 2048x2048 for logos
     
+    # Stripe Configuration
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+    stripe_price_id: Optional[str] = None  # Price ID for $29 brand kit
+    
     # Application Settings
     environment: str = "development"
     debug: bool = True

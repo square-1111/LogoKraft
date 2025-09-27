@@ -394,6 +394,66 @@ class BrandKitService:
                 "status": "error",
                 "message": f"Failed to get order status: {str(e)}"
             }
+    
+    async def process_paid_brand_kit_order(
+        self,
+        order_id: str,
+        payment_reference: str
+    ) -> Dict[str, Any]:
+        """
+        Process a brand kit order after payment confirmation.
+        Called from Stripe webhook when payment succeeds.
+        
+        Args:
+            order_id: UUID of the brand kit order
+            payment_reference: Stripe payment intent ID
+            
+        Returns:
+            Dict with processing status
+        """
+        try:
+            logger.info(f"Processing paid brand kit order {order_id} with payment {payment_reference}")
+            
+            # Get order details
+            result = await supabase_service.client.table('brand_kit_orders').select(
+                'id, user_id, selected_asset_id, order_status, payment_status'
+            ).eq('id', order_id).eq('payment_reference', payment_reference).single().execute()
+            
+            if not result.data:
+                raise ValueError(f"Order {order_id} not found or payment reference mismatch")
+            
+            order = result.data
+            
+            # Verify payment is confirmed
+            if order['payment_status'] != 'completed':
+                logger.warning(f"Order {order_id} payment not confirmed yet, status: {order['payment_status']}")
+                return {"status": "waiting_for_payment"}
+            
+            # Start generation process in background
+            asyncio.create_task(
+                self._process_brand_kit_generation(
+                    order_id=order['id'],
+                    selected_asset_id=order['selected_asset_id']
+                )
+            )
+            
+            logger.info(f"Started brand kit generation for order {order_id}")
+            
+            return {
+                "status": "processing",
+                "order_id": order_id,
+                "message": "Brand kit generation started"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to process paid brand kit order {order_id}: {e}")
+            # Update order status to failed
+            await supabase_service.client.table('brand_kit_orders').update({
+                'order_status': 'failed',
+                'error_message': str(e)
+            }).eq('id', order_id).execute()
+            
+            raise ValueError(f"Failed to process order: {str(e)}")
 
 # Export singleton instance
 brand_kit_service = BrandKitService()
