@@ -14,16 +14,34 @@ class UserLoginRequest(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., description="User's password")
 
+class OAuthSignInRequest(BaseModel):
+    """Request model for OAuth provider sign-in."""
+    provider: str = Field(..., description="OAuth provider (google, github)")
+    redirect_url: str = Field(..., description="Frontend URL to redirect after authentication")
+
+class OAuthCallbackRequest(BaseModel):
+    """Request model for OAuth callback handling."""
+    code: str = Field(..., description="Authorization code from OAuth provider")
+    state: Optional[str] = Field(None, description="State parameter for CSRF protection")
+
 class UserResponse(BaseModel):
     """Response model for user data."""
     id: str = Field(..., description="User's unique identifier")
     email: EmailStr = Field(..., description="User's email address")
+    full_name: Optional[str] = Field(None, description="User's full name")
+    avatar_url: Optional[str] = Field(None, description="User's profile picture URL")
+    provider: Optional[str] = Field(None, description="Authentication provider (email, google, github)")
 
 class AuthResponse(BaseModel):
     """Response model for authentication endpoints."""
     user: UserResponse = Field(..., description="User information")
     access_token: Optional[str] = Field(None, description="JWT access token")
     refresh_token: Optional[str] = Field(None, description="JWT refresh token")
+
+class OAuthURLResponse(BaseModel):
+    """Response model for OAuth URL generation."""
+    url: str = Field(..., description="OAuth provider authorization URL")
+    state: str = Field(..., description="State parameter for CSRF protection")
 
 # Brand Models
 

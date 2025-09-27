@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from dotenv import load_dotenv
 
-from app.routes import stream_routes, auth_routes, project_routes, brand_kit_routes, stripe_routes
+from app.routes import stream_routes, auth_routes, project_routes, brand_kit_routes, stripe_routes, user_routes
 from app.models.schemas import HealthResponse
 from app.services.supabase_service import supabase_service
 
@@ -32,6 +32,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_routes.router)
+app.include_router(user_routes.router)  # User profile and OAuth management
 app.include_router(project_routes.router)
 app.include_router(brand_kit_routes.router)  # $29 monetization endpoints
 app.include_router(stripe_routes.router)  # Stripe payment processing

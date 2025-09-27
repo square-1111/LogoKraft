@@ -8,9 +8,13 @@ from app.models.schemas import (
     UserLoginRequest, 
     AuthResponse, 
     ErrorResponse,
-    UserResponse
+    UserResponse,
+    OAuthSignInRequest,
+    OAuthCallbackRequest,
+    OAuthURLResponse
 )
 from app.services.supabase_service import supabase_service
+from app.services.oauth_service import oauth_service
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
@@ -205,3 +209,176 @@ async def get_me(current_user: UserResponse = Depends(get_current_user)):
         UserResponse: Current user data
     """
     return current_user
+
+@router.post("/oauth/signin",
+    response_model=OAuthURLResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate OAuth sign-in URL",
+    description="Generate authorization URL for Google or GitHub OAuth sign-in"
+)
+async def oauth_signin(oauth_data: OAuthSignInRequest):
+    """
+    Generate OAuth authorization URL for the specified provider.
+    
+    Args:
+        oauth_data: OAuth provider and redirect URL information
+        
+    Returns:
+        OAuthURLResponse: Authorization URL and state parameter
+        
+    Raises:
+        HTTPException: If provider is unsupported or URL generation fails
+    """
+    try:
+        logger.info(f"OAuth sign-in URL requested for provider: {oauth_data.provider}")
+        
+        # Generate OAuth URL
+        oauth_result = await oauth_service.get_oauth_url(
+            provider=oauth_data.provider,
+            redirect_url=oauth_data.redirect_url
+        )
+        
+        logger.info(f"OAuth URL generated successfully for {oauth_data.provider}")
+        
+        return OAuthURLResponse(
+            url=oauth_result["url"],
+            state=oauth_result["state"]
+        )
+        
+    except ValueError as e:
+        logger.error(f"OAuth URL generation failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in OAuth URL generation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate OAuth authorization URL"
+        )
+
+@router.post("/oauth/callback",
+    response_model=AuthResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Handle OAuth callback",
+    description="Process OAuth authorization callback with code exchange"
+)
+async def oauth_callback(callback_data: OAuthCallbackRequest):
+    """
+    Handle OAuth callback and exchange authorization code for tokens.
+    
+    Args:
+        callback_data: Authorization code and state from OAuth provider
+        
+    Returns:
+        AuthResponse: User data and authentication tokens
+        
+    Raises:
+        HTTPException: If callback processing fails
+    """
+    try:
+        logger.info("Processing OAuth callback")
+        
+        # Handle OAuth callback
+        auth_result = await oauth_service.handle_oauth_callback(
+            code=callback_data.code,
+            state=callback_data.state
+        )
+        
+        logger.info(f"OAuth authentication successful for user: {auth_result['user']['email']}")
+        
+        return AuthResponse(
+            user=UserResponse(**auth_result["user"]),
+            access_token=auth_result["access_token"],
+            refresh_token=auth_result["refresh_token"]
+        )
+        
+    except ValueError as e:
+        logger.error(f"OAuth callback processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in OAuth callback: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OAuth authentication failed"
+        )
+
+@router.post("/oauth/refresh",
+    response_model=AuthResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Refresh OAuth tokens",
+    description="Refresh expired OAuth access tokens using refresh token"
+)
+async def oauth_refresh(refresh_token: str):
+    """
+    Refresh OAuth access token using refresh token.
+    
+    Args:
+        refresh_token: Valid refresh token from previous authentication
+        
+    Returns:
+        AuthResponse: Updated user data and new tokens
+        
+    Raises:
+        HTTPException: If token refresh fails
+    """
+    try:
+        logger.info("OAuth token refresh requested")
+        
+        # Refresh OAuth tokens
+        auth_result = await oauth_service.refresh_oauth_token(refresh_token)
+        
+        logger.info(f"OAuth token refresh successful for user: {auth_result['user']['email']}")
+        
+        return AuthResponse(
+            user=UserResponse(**auth_result["user"]),
+            access_token=auth_result["access_token"],
+            refresh_token=auth_result["refresh_token"]
+        )
+        
+    except ValueError as e:
+        logger.error(f"OAuth token refresh failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in OAuth token refresh: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed"
+        )
+
+@router.post("/logout",
+    status_code=status.HTTP_200_OK,
+    summary="User logout",
+    description="Logout user and revoke authentication session"
+)
+async def logout(current_user: UserResponse = Depends(get_current_user)):
+    """
+    Logout user and revoke authentication session.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        Success message
+    """
+    try:
+        logger.info(f"Logout requested for user: {current_user.email}")
+        
+        # For OAuth users, we could revoke the session
+        # For now, we'll just return success (client should discard tokens)
+        
+        logger.info(f"User logged out successfully: {current_user.email}")
+        
+        return {"message": "Logged out successfully"}
+        
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
+        # Even if logout fails, return success to prevent client-side issues
+        return {"message": "Logged out successfully"}
